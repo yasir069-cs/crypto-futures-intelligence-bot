@@ -1,0 +1,314 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Crypto signal detector API powered by CoinGecko
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: coins
+    description: Coin data and signals
+  - name: market
+    description: Market overview
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /coins:
+    get:
+      operationId: listCoins
+      tags: [coins]
+      summary: List coins with signals
+      description: Returns top coins with price data and buy/sell signals from CoinGecko
+      parameters:
+        - name: vs_currency
+          in: query
+          schema:
+            type: string
+            default: usd
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: signal
+          in: query
+          description: Filter by signal type
+          schema:
+            type: ["string", "null"]
+            enum: [buy_long, sell_short, neutral, null]
+      responses:
+        "200":
+          description: List of coins with signals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CoinSignal"
+
+  /coins/{id}:
+    get:
+      operationId: getCoin
+      tags: [coins]
+      summary: Get coin detail
+      description: Returns detailed coin data and signal breakdown for a single coin
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Coin detail with signal breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoinDetail"
+        "404":
+          description: Coin not found
+
+  /signals:
+    get:
+      operationId: listSignals
+      tags: [coins]
+      summary: Get all current signals
+      description: Returns coins grouped by their signal type
+      responses:
+        "200":
+          description: Signals grouped by type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignalGroups"
+
+  /market-summary:
+    get:
+      operationId: getMarketSummary
+      tags: [market]
+      summary: Market summary
+      description: Overall market stats including total market cap, BTC dominance, signal counts
+      responses:
+        "200":
+          description: Market summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketSummary"
+
+  /top-signals:
+    get:
+      operationId: getTopSignals
+      tags: [market]
+      summary: Top bullish and bearish coins
+      description: Returns the top 5 buy-long and top 5 sell-short coins sorted by signal strength
+      responses:
+        "200":
+          description: Top signals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopSignals"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    CoinSignal:
+      type: object
+      required:
+        - id
+        - symbol
+        - name
+        - image
+        - current_price
+        - market_cap
+        - market_cap_rank
+        - price_change_percentage_24h
+        - price_change_percentage_7d_in_currency
+        - total_volume
+        - signal
+        - signal_strength
+        - signal_reasons
+      properties:
+        id:
+          type: string
+        symbol:
+          type: string
+        name:
+          type: string
+        image:
+          type: string
+        current_price:
+          type: number
+        market_cap:
+          type: number
+        market_cap_rank:
+          type: integer
+        price_change_percentage_24h:
+          type: ["number", "null"]
+        price_change_percentage_7d_in_currency:
+          type: ["number", "null"]
+        total_volume:
+          type: number
+        ath:
+          type: ["number", "null"]
+        ath_change_percentage:
+          type: ["number", "null"]
+        signal:
+          type: string
+          enum: [buy_long, sell_short, neutral]
+        signal_strength:
+          type: number
+          description: Signal strength from -100 (strong sell) to +100 (strong buy)
+        signal_reasons:
+          type: array
+          items:
+            type: string
+
+    CoinDetail:
+      type: object
+      required:
+        - id
+        - symbol
+        - name
+        - image
+        - current_price
+        - market_cap
+        - market_cap_rank
+        - price_change_percentage_24h
+        - price_change_percentage_7d_in_currency
+        - total_volume
+        - signal
+        - signal_strength
+        - signal_reasons
+        - sparkline_in_7d
+      properties:
+        id:
+          type: string
+        symbol:
+          type: string
+        name:
+          type: string
+        image:
+          type: string
+        current_price:
+          type: number
+        market_cap:
+          type: number
+        market_cap_rank:
+          type: integer
+        price_change_percentage_24h:
+          type: ["number", "null"]
+        price_change_percentage_7d_in_currency:
+          type: ["number", "null"]
+        price_change_percentage_30d_in_currency:
+          type: ["number", "null"]
+        total_volume:
+          type: number
+        ath:
+          type: ["number", "null"]
+        ath_change_percentage:
+          type: ["number", "null"]
+        circulating_supply:
+          type: ["number", "null"]
+        total_supply:
+          type: ["number", "null"]
+        signal:
+          type: string
+          enum: [buy_long, sell_short, neutral]
+        signal_strength:
+          type: number
+        signal_reasons:
+          type: array
+          items:
+            type: string
+        sparkline_in_7d:
+          type: array
+          items:
+            type: number
+
+    SignalGroups:
+      type: object
+      required:
+        - buy_long
+        - sell_short
+        - neutral
+      properties:
+        buy_long:
+          type: array
+          items:
+            $ref: "#/components/schemas/CoinSignal"
+        sell_short:
+          type: array
+          items:
+            $ref: "#/components/schemas/CoinSignal"
+        neutral:
+          type: array
+          items:
+            $ref: "#/components/schemas/CoinSignal"
+
+    MarketSummary:
+      type: object
+      required:
+        - total_market_cap_usd
+        - total_volume_24h
+        - btc_dominance
+        - signal_counts
+        - market_cap_change_24h
+      properties:
+        total_market_cap_usd:
+          type: number
+        total_volume_24h:
+          type: number
+        btc_dominance:
+          type: number
+        market_cap_change_24h:
+          type: number
+        signal_counts:
+          type: object
+          required: [buy_long, sell_short, neutral]
+          properties:
+            buy_long:
+              type: integer
+            sell_short:
+              type: integer
+            neutral:
+              type: integer
+
+    TopSignals:
+      type: object
+      required:
+        - top_buy_long
+        - top_sell_short
+      properties:
+        top_buy_long:
+          type: array
+          items:
+            $ref: "#/components/schemas/CoinSignal"
+        top_sell_short:
+          type: array
+          items:
+            $ref: "#/components/schemas/CoinSignal"
