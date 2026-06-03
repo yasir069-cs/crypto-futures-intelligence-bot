@@ -3,7 +3,7 @@ from telegram import Update
 import asyncio
 from datetime import datetime
 from config import Config
-from telegram.handlers import handlers
+from telegram.handlers import TelegramHandlers
 from core.alert_scheduler import alert_scheduler
 from utils.logger import get_logger
 
@@ -12,7 +12,8 @@ logger = get_logger(__name__)
 class TelegramBot:
     """Main Telegram bot class"""
     
-    def __init__(self):
+    def __init__(self, db_instance):
+        self.db = db_instance
         self.app = None
         self.running = False
     
@@ -20,16 +21,17 @@ class TelegramBot:
         """Initialize the bot"""
         self.app = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
         
-        # Register command handlers
-        self.app.add_handler(CommandHandler("start", handlers.start))
-        self.app.add_handler(CommandHandler("help", handlers.help_command))
-        self.app.add_handler(CommandHandler("summary", handlers.summary))
-        self.app.add_handler(CommandHandler("top", handlers.top_opportunities))
-        self.app.add_handler(CommandHandler("buy", handlers.buy_signal))
-        self.app.add_handler(CommandHandler("portfolio", handlers.portfolio))
-        self.app.add_handler(CommandHandler("news", handlers.news))
-        self.app.add_handler(CommandHandler("status", handlers.status))
-        self.app.add_handler(CommandHandler("language", handlers.language_command))
+        # Instantiate handlers with the database instance
+        self.handlers = TelegramHandlers(self.db)
+        self.app.add_handler(CommandHandler("start", self.handlers.start))
+        self.app.add_handler(CommandHandler("help", self.handlers.help_command))
+        self.app.add_handler(CommandHandler("summary", self.handlers.summary))
+        self.app.add_handler(CommandHandler("top", self.handlers.top_opportunities))
+        self.app.add_handler(CommandHandler("buy", self.handlers.buy_signal))
+        self.app.add_handler(CommandHandler("portfolio", self.handlers.portfolio))
+        self.app.add_handler(CommandHandler("news", self.handlers.news))
+        self.app.add_handler(CommandHandler("status", self.handlers.status))
+        self.app.add_handler(CommandHandler("language", self.handlers.language_command))
         
         self.running = True
         logger.info("Bot initialized successfully")
@@ -74,3 +76,19 @@ class TelegramBot:
         if self.app:
             await self.app.stop()
         logger.info("Bot stopped")
+
+    async def send_signal_alert(self, signal: dict):
+        """Send a formatted signal alert to the configured chat ID"""
+        message = (
+            f"🚨 **New Signal Alert** 🚨\n\n"
+            f"📈 **Coin:** {signal["coin"].upper()}\n"
+            f"➡️ **Action:** {signal["action"]}\n"
+            f"🎯 **Signal Type:** {signal["signal_type"]}\n"
+            f"📊 **Confidence:** {signal["confidence"]}%\n"
+            f"⚠️ **Risk Level:** {signal["risk_level"]}\n"
+            f"💡 **Reasons:** {signal["reasons"]}\n"
+            f"💲 **Price:** ${signal["price"]:.2f}\n"
+            f"⏱️ **Timeframe:** {signal["timeframe"]}\n"
+            f"⏰ **Timestamp:** {signal["timestamp"]}\n"
+        )
+        await self.send_message(Config.TELEGRAM_CHAT_ID, message)

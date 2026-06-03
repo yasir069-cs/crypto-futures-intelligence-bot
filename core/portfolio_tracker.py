@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import datetime
 from typing import Dict, List, Optional
-from database import db
+from database import Database
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -9,12 +9,13 @@ logger = get_logger(__name__)
 class PortfolioTracker:
     """Track user portfolio and P&L"""
     
-    def __init__(self):
+    def __init__(self, db_instance):
+        self.db = db_instance
         self.init_tables()
     
     def init_tables(self):
         """Initialize portfolio tables"""
-        conn = db.get_connection()
+        conn = self.db.get_connection()
         cursor = conn.cursor()
         
         # Portfolio holdings
@@ -55,7 +56,7 @@ class PortfolioTracker:
     def add_holding(self, user_id: str, coin: str, quantity: float, entry_price: float) -> bool:
         """Add coin to portfolio"""
         try:
-            conn = db.get_connection()
+            conn = self.db.get_connection()
             cursor = conn.cursor()
             
             cursor.execute('''
@@ -74,7 +75,7 @@ class PortfolioTracker:
     def get_portfolio(self, user_id: str) -> List[Dict]:
         """Get user portfolio"""
         try:
-            conn = db.get_connection()
+            conn = self.db.get_connection()
             cursor = conn.cursor()
             
             cursor.execute('SELECT * FROM portfolio WHERE user_id = ?', (user_id,))
@@ -89,7 +90,7 @@ class PortfolioTracker:
     def update_price(self, user_id: str, coin: str, current_price: float) -> bool:
         """Update coin current price"""
         try:
-            conn = db.get_connection()
+            conn = self.db.get_connection()
             cursor = conn.cursor()
             
             cursor.execute('''
@@ -119,9 +120,9 @@ class PortfolioTracker:
             logger.error(f"Error updating price: {e}")
             return False
     
-    def get_portfolio_summary(self, user_id: str) -> Dict:
+    def get_portfolio_summary(self, user_id: str, db_instance) -> Dict:
         """Get portfolio summary"""
-        portfolio = self.get_portfolio(user_id)
+        holdings = db_instance.get_portfolio(user_id)
         
         total_invested = sum(p['quantity'] * p['entry_price'] for p in portfolio)
         total_current = sum(p['quantity'] * p['current_price'] for p in portfolio)
@@ -140,7 +141,7 @@ class PortfolioTracker:
     def record_trade(self, user_id: str, coin: str, action: str, quantity: float, price: float, fee: float = 0) -> bool:
         """Record trade transaction"""
         try:
-            conn = db.get_connection()
+            conn = self.db.get_connection()
             cursor = conn.cursor()
             
             total = quantity * price + fee
@@ -158,4 +159,4 @@ class PortfolioTracker:
             logger.error(f"Error recording trade: {e}")
             return False
 
-portfolio_tracker = PortfolioTracker()
+db)

@@ -6,7 +6,10 @@ from database import Database
 @pytest.fixture
 def test_db():
     """Create test database"""
-    return Database(':memory:')
+    db = Database(":memory:")
+    db.init_database()
+    yield db
+    # No explicit teardown needed for in-memory database, it's destroyed when connection closes
 
 def test_insert_signal(test_db):
     """Test inserting a signal"""

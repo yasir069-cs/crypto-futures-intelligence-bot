@@ -137,6 +137,9 @@ class Scanner:
                 {},  # volume_data - can be enhanced
                 oi_data or {}
             )
+            if signal:
+                # Add timeframe to signal for database insertion
+                signal["timeframe"] = "1H" # Defaulting to 1H, can be made dynamic if needed
             
             return signal
             

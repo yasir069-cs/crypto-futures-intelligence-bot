@@ -3,17 +3,24 @@ from telegram.ext import ContextTypes
 from datetime import datetime
 from config import Config
 from core.trading_signals import signal_generator
-from core.portfolio_tracker import portfolio_tracker
+
 from core.news_aggregator import news_aggregator
 from core.market_analyzer import market_analyzer
 from models.language_support import language_support
 from utils.logger import get_logger
-from database import db
+from database import Database
+from core.portfolio_tracker import PortfolioTracker
+
+
+
 
 logger = get_logger(__name__)
 
 class TelegramHandlers:
     """Handle telegram bot commands"""
+    def __init__(self, db_instance):
+        self.db = db_instance
+        self.portfolio_tracker = PortfolioTracker(self.db)
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
@@ -122,7 +129,7 @@ Signal Type: {signal['signal_type']}
     async def portfolio(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show portfolio"""
         user_id = str(update.effective_user.id)
-        summary = portfolio_tracker.get_portfolio_summary(user_id)
+        summary = self.portfolio_tracker.get_portfolio_summary(user_id)
         
         if summary['holdings_count'] == 0:
             await update.message.reply_text("📭 Your portfolio is empty")
@@ -171,7 +178,7 @@ Holdings: {summary['holdings_count']}
     
     async def status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Bot status"""
-        stats = db.get_daily_stats()
+        stats = self.db.get_daily_stats()
         
         message = f"""
 🤖 **Bot Status**
@@ -203,4 +210,4 @@ Holdings: {summary['holdings_count']}
             langs = ", ".join([f"{code}: {name}" for code, name in language_support.LANGUAGES.items()])
             await update.message.reply_text(f"Available languages:\n{langs}\n\nUsage: /language <code>")
 
-handlers = TelegramHandlers()
+

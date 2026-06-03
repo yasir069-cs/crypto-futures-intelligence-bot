@@ -7,7 +7,7 @@ Telegram-based bot for market analysis and signals
 import asyncio
 import signal
 import sys
-from datetime import datetime
+from database import Database
 from config import Config, get_config
 from utils.logger import get_logger, setup_logging
 from telegram.bot import TelegramBot
@@ -33,8 +33,11 @@ async def main():
         Config.validate()
         logger.info("Configuration validated successfully")
         
+        # Initialize database
+        app_db = Database()
+
         # Initialize Telegram bot
-        bot = TelegramBot()
+        bot = TelegramBot(app_db)
         await bot.initialize()
         logger.info("Telegram bot initialized and running")
         logger.info("Bot is ready for commands. Press Ctrl+C to stop.")

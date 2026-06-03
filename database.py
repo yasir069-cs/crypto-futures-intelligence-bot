@@ -14,12 +14,17 @@ class Database:
     def __init__(self, db_path: str = None):
         self.db_path = db_path or Config.DATABASE_PATH
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        self._conn = None # Store connection for in-memory DB
         self.init_database()
     
     def get_connection(self):
         """Get database connection"""
+        if self.db_path == ":memory:" and self._conn:
+            return self._conn
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        if self.db_path == ":memory:":
+            self._conn = conn
         return conn
     
     def init_database(self):
@@ -92,7 +97,8 @@ class Database:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_market_data_coin_tf ON market_data(coin, timeframe)')
         
         conn.commit()
-        conn.close()
+        if self.db_path != ":memory:":
+            conn.close()
         logger.info("Database initialized successfully")
     
     def insert_signal(self, signal_data: Dict) -> int:
@@ -298,5 +304,4 @@ class Database:
         finally:
             conn.close()
 
-# Global database instance
-db = Database()
+

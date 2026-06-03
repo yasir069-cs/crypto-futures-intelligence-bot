@@ -39,12 +39,12 @@ class MarketAnalyzer:
                 return {}
             
             prices = np.array([p[1] for p in data['prices']])
-            volumes = np.array([v[1] for v in data['market_caps']])
+            market_caps = np.array([v[1] for v in data["market_caps"]])
             
             # Technical Analysis
             df = pd.DataFrame({
                 'close': prices,
-                'volume': volumes
+                'market_cap': market_caps
             })
             
             # RSI (Relative Strength Index)
@@ -64,7 +64,7 @@ class MarketAnalyzer:
             volatility = self._calculate_volatility(prices)
             
             # Price Changes
-            price_change_24h = ((prices[-1] - prices[-1]) / prices[-1] * 100) if prices[-1] != 0 else 0
+            price_change_24h = ((prices[-1] - prices[-2]) / prices[-2] * 100) if prices[-2] != 0 else 0
             price_change_7d = ((prices[-1] - prices[-7]) / prices[-7] * 100) if prices[-7] != 0 else 0
             price_change_30d = ((prices[-1] - prices[-30]) / prices[-30] * 100) if prices[-30] != 0 else 0
             
