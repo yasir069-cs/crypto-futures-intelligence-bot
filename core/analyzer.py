@@ -137,10 +137,10 @@ class Analyzer:
         
         if current_price > recent_high * 0.98:
             score += 20
-            reasons.append("• Price near recent highs")
+            reasons.append("â€¢ Price near recent highs")
         elif current_price < recent_low * 1.02:
-            score += 20
-            reasons.append("• Price near recent lows")
+            score -= 20
+            reasons.append("â€¢ Price near recent lows")
         
         return {'score': score, 'reasons': reasons}
     
@@ -155,13 +155,13 @@ class Analyzer:
         
         if rvol > 5:
             score += 25
-            reasons.append(f"• Very strong volume ({rvol:.1f}x)")
+            reasons.append(f"â€¢ Very strong volume ({rvol:.1f}x)")
         elif rvol > 3:
             score += 20
-            reasons.append(f"• Strong volume ({rvol:.1f}x)")
+            reasons.append(f"â€¢ Strong volume ({rvol:.1f}x)")
         elif rvol > 1.5:
             score += 10
-            reasons.append(f"• Above average volume ({rvol:.1f}x)")
+            reasons.append(f"â€¢ Above average volume ({rvol:.1f}x)")
         
         return {'score': score, 'reasons': reasons}
     
@@ -178,16 +178,16 @@ class Analyzer:
         
         if current > ma20 > ma50:
             score += 25
-            reasons.append("• Strong uptrend (above MA20 > MA50)")
+            reasons.append("â€¢ Strong uptrend (above MA20 > MA50)")
         elif current < ma20 < ma50:
-            score += 25
-            reasons.append("• Strong downtrend (below MA20 < MA50)")
+            score -= 25
+            reasons.append("â€¢ Strong downtrend (below MA20 < MA50)")
         elif current > ma20:
             score += 15
-            reasons.append("• Above MA20 (bullish)")
+            reasons.append("â€¢ Above MA20 (bullish)")
         elif current < ma20:
-            score += 15
-            reasons.append("• Below MA20 (bearish)")
+            score -= 15
+            reasons.append("â€¢ Below MA20 (bearish)")
         
         return {'score': score, 'reasons': reasons}
     
@@ -201,10 +201,10 @@ class Analyzer:
         
         if current_price > resistance * 0.99:
             score += 20
-            reasons.append("• Near resistance level")
+            reasons.append("â€¢ Near resistance level")
         elif current_price < support * 1.01:
-            score += 20
-            reasons.append("• Near support level")
+            score -= 20
+            reasons.append("â€¢ Near support level")
         
         return {'score': score, 'reasons': reasons}
     
@@ -218,10 +218,10 @@ class Analyzer:
         
         if is_breakout(current_price, resistance):
             score += 15
-            reasons.append("• Breakout above resistance")
+            reasons.append("â€¢ Breakout above resistance")
         elif is_breakdown(current_price, support):
-            score += 15
-            reasons.append("• Breakdown below support")
+            score -= 15
+            reasons.append("â€¢ Breakdown below support")
         
         return {'score': score, 'reasons': reasons}
     
@@ -235,7 +235,10 @@ class Analyzer:
         """Generate signal from multi-timeframe analysis"""
         
         # Aggregate scores from all timeframes
-        total_score = sum(analysis.get('score', 0) for analysis in timeframe_analyses)
+        total_score = sum(
+            sum(analysis.get('scores', {}).values()) if analysis.get('scores') else analysis.get('score', 0)
+            for analysis in timeframe_analyses
+        )
         all_reasons = []
         
         for analysis in timeframe_analyses:
@@ -249,7 +252,7 @@ class Analyzer:
             return None
         
         # Calculate confidence
-        confidence = min(99, int(total_score / 2))
+        confidence = min(99, int(abs(total_score) / 2))
         
         # Calculate risk
         risk_level = self.risk_engine.calculate_risk(confidence, len(all_reasons))
