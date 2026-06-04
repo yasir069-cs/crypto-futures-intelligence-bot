@@ -54,9 +54,6 @@ class MarketAnalyzer:
             # MACD
             macd = ta.trend.macd(df['close'])
             
-            # Bollinger Bands
-            bb = ta.volatility.bollinger_bands(df['close'], window=20, window_dev=2)
-            
             # Support & Resistance
             support, resistance = self._calculate_support_resistance(prices)
             
@@ -82,11 +79,9 @@ class MarketAnalyzer:
                 'signal': self._generate_signal(current_rsi, volatility, price_change_24h),
                 'timestamp': datetime.utcnow().isoformat()
             }
-       except Exception as e:
-    import traceback
-    traceback.print_exc()
-    logger.error(f"Error analyzing {symbol}: {e}")
-    return {}
+        except Exception as e:
+            logger.error(f"Error analyzing {symbol}: {e}", exc_info=True)
+            return {}
     
     def _calculate_support_resistance(self, prices: np.ndarray) -> tuple:
         """Calculate support and resistance levels"""
