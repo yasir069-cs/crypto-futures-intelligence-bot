@@ -120,9 +120,9 @@ class PortfolioTracker:
             logger.error(f"Error updating price: {e}")
             return False
     
-    def get_portfolio_summary(self, user_id: str, db_instance) -> Dict:
+    def get_portfolio_summary(self, user_id: str) -> Dict:
         """Get portfolio summary"""
-        holdings = db_instance.get_portfolio(user_id)
+        portfolio = self.get_portfolio(user_id)
         
         total_invested = sum(p['quantity'] * p['entry_price'] for p in portfolio)
         total_current = sum(p['quantity'] * p['current_price'] for p in portfolio)
@@ -158,5 +158,3 @@ class PortfolioTracker:
         except Exception as e:
             logger.error(f"Error recording trade: {e}")
             return False
-
-db)
