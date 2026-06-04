@@ -7,10 +7,11 @@ Telegram-based bot for market analysis and signals
 import asyncio
 import signal
 import sys
+from datetime import datetime
 from database import Database
-from config import Config, get_config
+from config import Config
 from utils.logger import get_logger, setup_logging
-from telegram.bot import TelegramBot
+from bot_telegram.bot import TelegramBot
 
 logger = None
 bot = None
