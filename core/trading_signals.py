@@ -140,6 +140,9 @@ class TradingSignalGenerator:
         signals = []
         for coin in top_coins[:limit]:
     signal = await self.generate_signal(coin)
+
+    print("DEBUG:", coin, bool(signal))
+
     if signal:
         signals.append(signal)
         
