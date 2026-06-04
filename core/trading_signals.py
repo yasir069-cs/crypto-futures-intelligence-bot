@@ -138,7 +138,7 @@ class TradingSignalGenerator:
                      'polkadot', 'dogecoin', 'litecoin', 'chainlink', 'uniswap']
         
         signals = []
-        for coin in top_coins[:limit]:
+    for coin in top_coins[:limit]:
     signal = await self.generate_signal(coin)
 
     print("DEBUG:", coin, bool(signal))
