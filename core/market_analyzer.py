@@ -82,9 +82,11 @@ class MarketAnalyzer:
                 'signal': self._generate_signal(current_rsi, volatility, price_change_24h),
                 'timestamp': datetime.utcnow().isoformat()
             }
-        except Exception as e:
-            logger.error(f"Error analyzing {symbol}: {e}")
-            return {}
+       except Exception as e:
+    import traceback
+    traceback.print_exc()
+    logger.error(f"Error analyzing {symbol}: {e}")
+    return {}
     
     def _calculate_support_resistance(self, prices: np.ndarray) -> tuple:
         """Calculate support and resistance levels"""
