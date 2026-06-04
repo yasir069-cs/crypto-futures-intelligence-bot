@@ -303,7 +303,7 @@ class Database:
             raise
         finally:
             conn.close()
-        def get_portfolio(self, user_id: str):
+    def get_portfolio(self, user_id: str):
         """Get user portfolio"""
 
         conn = self.get_connection()
