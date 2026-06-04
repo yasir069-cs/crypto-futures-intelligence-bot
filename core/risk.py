@@ -30,9 +30,9 @@ class RiskEngine:
         adjusted_score = min(1.0, adjusted_score)
         
         # Classify risk
-        if adjusted_score >= self.risk_levels['low']['min']:
+        if adjusted_score >= self.risk_levels['LOW']['min_confidence'] / 100:
             return 'LOW'
-        elif adjusted_score >= self.risk_levels['medium']['min']:
+        elif adjusted_score >= self.risk_levels['MEDIUM']['min_confidence'] / 100:
             return 'MEDIUM'
         else:
             return 'HIGH'
