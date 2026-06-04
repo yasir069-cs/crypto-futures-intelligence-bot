@@ -139,9 +139,12 @@ class TradingSignalGenerator:
         
         signals = []
         for coin in top_coins[:limit]:
-            signal = await self.generate_signal(coin)
-            if signal:
-                signals.append(signal)
+    signal = await self.generate_signal(coin)
+
+    print("DEBUG:", coin, bool(signal))
+
+    if signal:
+        signals.append(signal)
         
         # Sort by confidence
         return sorted(signals, key=lambda x: x.get('confidence', 0), reverse=True)
