@@ -8,8 +8,8 @@ class Config:
     """Base configuration"""
     
     # Telegram
-    TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '8816616926:AAHqoXYMbo5kGtXHrBidI8Oha2RvLaK86uM')
-    TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '1490359174')
+    TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+    TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
     
     # Bot Configuration
     ENABLE_DEBUG = os.getenv('ENABLE_DEBUG', 'False').lower() == 'true'
@@ -19,8 +19,10 @@ class Config:
     DATABASE_PATH = os.getenv("DATABASE_PATH", "data/signals.db")
 
     # Scanner Configuration
+    SCAN_INTERVAL_MINUTES = int(os.getenv("SCAN_INTERVAL_MINUTES", 15))
     SCAN_INTERVAL_HOURS = int(os.getenv("SCAN_INTERVAL_HOURS", 1))
-    MAX_PAIRS_SCAN = int(os.getenv("MAX_PAIRS_SCAN", 50))
+    MAX_PAIRS_SCAN = int(os.getenv("MAX_PAIRS_SCAN", 100))
+    TOP_COINS_SCAN_LIMIT = int(os.getenv("TOP_COINS_SCAN_LIMIT", 100))
     ALERT_COOLDOWN_HOURS = int(os.getenv("ALERT_COOLDOWN_HOURS", 6))
 
     # OKX API Configuration
@@ -50,8 +52,7 @@ class Config:
     def validate(cls):
         """Validate configuration"""
         required = [
-            "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID",
-            "OKX_API_KEY", "OKX_API_SECRET", "OKX_PASSPHRASE"
+            "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"
         ]
         missing = [key for key in required if not getattr(cls, key)]
         if missing:
