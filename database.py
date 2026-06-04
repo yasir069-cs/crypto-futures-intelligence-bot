@@ -319,5 +319,4 @@ class Database:
         conn.close()
 
         return [dict(row) for row in rows]
-
-
+db = Database()
