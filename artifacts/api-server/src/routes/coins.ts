@@ -5,10 +5,12 @@ import {
   getMarketsWithSparkline,
   type CoinGeckoMarket,
 } from "../lib/coinGeckoCache";
+import { computeTA, type TAResult } from "../lib/technicalAnalysis";
+import { getFundingRate } from "../lib/fundingRates";
 
 const router = Router();
 
-interface CoinSignal {
+export interface CoinSignal {
   id: string;
   symbol: string;
   name: string;
@@ -24,9 +26,17 @@ interface CoinSignal {
   signal: "buy_long" | "sell_short" | "neutral";
   signal_strength: number;
   signal_reasons: string[];
+  ta?: TAResult;
+  funding_rate?: number | null;
 }
 
-export function computeSignal(coin: CoinGeckoMarket): {
+// ─── Core signal logic (sync, accepts optional pre-computed TA & funding rate)
+
+export function computeSignal(
+  coin: CoinGeckoMarket,
+  ta?: TAResult | null,
+  fundingRate?: number | null
+): {
   signal: "buy_long" | "sell_short" | "neutral";
   signal_strength: number;
   signal_reasons: string[];
@@ -40,59 +50,137 @@ export function computeSignal(coin: CoinGeckoMarket): {
   const volumeToMarketCap =
     coin.market_cap > 0 ? coin.total_volume / coin.market_cap : 0;
 
+  // ── 24h momentum ────────────────────────────────────────────────────────────
   if (change24h > 5) {
-    score += 25;
+    score += 20;
     reasons.push(`Strong 24h gain: +${change24h.toFixed(1)}%`);
   } else if (change24h > 2) {
-    score += 12;
+    score += 10;
     reasons.push(`Positive 24h momentum: +${change24h.toFixed(1)}%`);
   } else if (change24h < -5) {
-    score -= 25;
+    score -= 20;
     reasons.push(`Sharp 24h decline: ${change24h.toFixed(1)}%`);
   } else if (change24h < -2) {
-    score -= 12;
+    score -= 10;
     reasons.push(`Negative 24h pressure: ${change24h.toFixed(1)}%`);
   }
 
+  // ── 7d trend ────────────────────────────────────────────────────────────────
   if (change7d > 10) {
-    score += 30;
+    score += 20;
     reasons.push(`Strong 7d uptrend: +${change7d.toFixed(1)}%`);
   } else if (change7d > 3) {
-    score += 15;
+    score += 10;
     reasons.push(`7d upward momentum: +${change7d.toFixed(1)}%`);
   } else if (change7d < -10) {
-    score -= 30;
+    score -= 20;
     reasons.push(`7d downtrend confirmed: ${change7d.toFixed(1)}%`);
   } else if (change7d < -3) {
-    score -= 15;
+    score -= 10;
     reasons.push(`7d bearish trend: ${change7d.toFixed(1)}%`);
   }
 
+  // ── Volume spike ─────────────────────────────────────────────────────────────
   if (volumeToMarketCap > 0.15) {
     const direction = change24h >= 0 ? "bullish" : "bearish";
-    const volumeScore = change24h >= 0 ? 20 : -20;
-    score += volumeScore;
+    score += change24h >= 0 ? 15 : -15;
     reasons.push(
-      `High volume spike (${(volumeToMarketCap * 100).toFixed(0)}% of market cap) — ${direction} confirmation`
+      `High volume spike (${(volumeToMarketCap * 100).toFixed(0)}% of mkt cap) — ${direction}`
     );
   } else if (volumeToMarketCap > 0.08) {
-    score += change24h >= 0 ? 10 : -10;
+    score += change24h >= 0 ? 7 : -7;
     reasons.push(`Elevated volume activity`);
   }
 
+  // ── ATH distance ─────────────────────────────────────────────────────────────
   if (athChange > -5) {
-    score -= 15;
-    reasons.push(`Near all-time high — potential resistance zone`);
+    score -= 10;
+    reasons.push(`Near all-time high — potential resistance`);
   } else if (athChange < -80) {
-    score += 15;
-    reasons.push(`Deep discount from ATH (${athChange.toFixed(0)}%) — oversold territory`);
+    score += 12;
+    reasons.push(`Deep ATH discount (${athChange.toFixed(0)}%) — oversold territory`);
   } else if (athChange < -50) {
-    score += 8;
+    score += 6;
     reasons.push(`Significant ATH discount: ${athChange.toFixed(0)}%`);
   }
 
-  const clamped = Math.max(-100, Math.min(100, score));
+  // ── RSI ──────────────────────────────────────────────────────────────────────
+  if (ta?.rsi != null) {
+    const rsi = ta.rsi;
+    if (rsi < 25) {
+      score += 25;
+      reasons.push(`RSI ${rsi} — extremely oversold (strong buy zone)`);
+    } else if (rsi < 35) {
+      score += 15;
+      reasons.push(`RSI ${rsi} — oversold (buy signal)`);
+    } else if (rsi < 45) {
+      score += 5;
+      reasons.push(`RSI ${rsi} — leaning oversold`);
+    } else if (rsi > 75) {
+      score -= 25;
+      reasons.push(`RSI ${rsi} — extremely overbought (strong sell zone)`);
+    } else if (rsi > 65) {
+      score -= 15;
+      reasons.push(`RSI ${rsi} — overbought (sell signal)`);
+    } else if (rsi > 55) {
+      score -= 5;
+      reasons.push(`RSI ${rsi} — leaning overbought`);
+    } else {
+      reasons.push(`RSI ${rsi} — neutral zone`);
+    }
+  }
 
+  // ── MACD ─────────────────────────────────────────────────────────────────────
+  if (ta?.macd != null) {
+    const { histogram } = ta.macd;
+    if (histogram > 0) {
+      score += 15;
+      reasons.push(`MACD histogram positive — bullish momentum`);
+    } else if (histogram < 0) {
+      score -= 15;
+      reasons.push(`MACD histogram negative — bearish momentum`);
+    }
+  }
+
+  // ── Bollinger Bands ───────────────────────────────────────────────────────────
+  if (ta?.bb != null) {
+    const { pctB } = ta.bb;
+    if (pctB < 0.1) {
+      score += 20;
+      reasons.push(`Price below BB lower band (%B ${(pctB * 100).toFixed(0)}%) — strong buy zone`);
+    } else if (pctB < 0.25) {
+      score += 10;
+      reasons.push(`Price near BB lower band (%B ${(pctB * 100).toFixed(0)}%) — buy zone`);
+    } else if (pctB > 0.9) {
+      score -= 20;
+      reasons.push(`Price above BB upper band (%B ${(pctB * 100).toFixed(0)}%) — strong sell zone`);
+    } else if (pctB > 0.75) {
+      score -= 10;
+      reasons.push(`Price near BB upper band (%B ${(pctB * 100).toFixed(0)}%) — sell zone`);
+    }
+  }
+
+  // ── Funding Rate (contrarian) ─────────────────────────────────────────────────
+  if (fundingRate != null) {
+    const pct = fundingRate * 100;
+    if (fundingRate > 0.001) {
+      score -= 20;
+      reasons.push(`Funding rate +${pct.toFixed(4)}% — longs paying shorts (bearish sentiment)`);
+    } else if (fundingRate > 0.0005) {
+      score -= 10;
+      reasons.push(`Funding rate +${pct.toFixed(4)}% — elevated longs (mildly bearish)`);
+    } else if (fundingRate < -0.001) {
+      score += 20;
+      reasons.push(`Funding rate ${pct.toFixed(4)}% — shorts paying longs (bullish sentiment)`);
+    } else if (fundingRate < -0.0005) {
+      score += 10;
+      reasons.push(`Funding rate ${pct.toFixed(4)}% — elevated shorts (mildly bullish)`);
+    } else {
+      reasons.push(`Funding rate ${pct.toFixed(4)}% — neutral`);
+    }
+  }
+
+  const clamped = Math.max(-100, Math.min(100, score));
   let signal: "buy_long" | "sell_short" | "neutral";
   if (clamped >= 20) signal = "buy_long";
   else if (clamped <= -20) signal = "sell_short";
@@ -104,6 +192,24 @@ export function computeSignal(coin: CoinGeckoMarket): {
 
   return { signal, signal_strength: clamped, signal_reasons: reasons };
 }
+
+// ─── Async full signal (fetches sparkline TA + funding rate) ─────────────────
+
+export async function computeSignalFull(coin: CoinGeckoMarket): Promise<{
+  signal: "buy_long" | "sell_short" | "neutral";
+  signal_strength: number;
+  signal_reasons: string[];
+  ta: TAResult | null;
+  funding_rate: number | null;
+}> {
+  const prices = coin.sparkline_in_7d?.price ?? [];
+  const ta = prices.length >= 27 ? computeTA(prices) : null;
+  const funding_rate = await getFundingRate(coin.id, coin.symbol);
+  const result = computeSignal(coin, ta, funding_rate);
+  return { ...result, ta, funding_rate };
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function toCoinSignal(coin: CoinGeckoMarket): CoinSignal {
   const { signal, signal_strength, signal_reasons } = computeSignal(coin);
@@ -125,6 +231,8 @@ function toCoinSignal(coin: CoinGeckoMarket): CoinSignal {
     signal_reasons,
   };
 }
+
+// ─── Routes ──────────────────────────────────────────────────────────────────
 
 router.get("/coins", async (req, res) => {
   const parsed = ListCoinsQueryParams.safeParse(req.query);
@@ -164,7 +272,8 @@ router.get("/coins/:id", async (req, res) => {
       return;
     }
 
-    const { signal, signal_strength, signal_reasons } = computeSignal(coin);
+    const { signal, signal_strength, signal_reasons, ta, funding_rate } =
+      await computeSignalFull(coin);
 
     res.json({
       id: coin.id,
@@ -186,6 +295,8 @@ router.get("/coins/:id", async (req, res) => {
       signal_strength,
       signal_reasons,
       sparkline_in_7d: coin.sparkline_in_7d?.price ?? [],
+      ta,
+      funding_rate,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch coin detail");

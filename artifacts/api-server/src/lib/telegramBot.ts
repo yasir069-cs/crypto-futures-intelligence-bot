@@ -1,5 +1,5 @@
-import { getMarkets, getGlobal, type CoinGeckoMarket } from "./coinGeckoCache";
-import { computeSignal } from "../routes/coins";
+import { getMarkets, getMarketsWithSparkline, getGlobal, type CoinGeckoMarket } from "./coinGeckoCache";
+import { computeSignal, computeSignalFull } from "../routes/coins";
 import { logger } from "./logger";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -59,36 +59,9 @@ function signalEmoji(signal: string): string {
   return "⚪";
 }
 
-function change24Emoji(v: number | null): string {
+function changeEmoji(v: number | null): string {
   if (v == null) return "";
   return v >= 0 ? "▲" : "▼";
-}
-
-// ─── Message Builders ───────────────────────────────────────────────────────
-
-function buildCoinMessage(coin: CoinGeckoMarket): string {
-  const { signal, signal_strength, signal_reasons } = computeSignal(coin);
-  const se = signalEmoji(signal);
-  const label = signal === "buy_long" ? "BUY LONG" : signal === "sell_short" ? "SELL SHORT" : "NEUTRAL";
-  const ch24 = coin.price_change_percentage_24h;
-  const ch7d = coin.price_change_percentage_7d_in_currency;
-
-  const bar = buildStrengthBar(signal_strength);
-
-  const lines = [
-    `${se} <b>${coin.name} (${coin.symbol.toUpperCase()})</b> — <b>${label}</b>`,
-    ``,
-    `💰 Price: <b>${fmtPrice(coin.current_price)}</b>`,
-    `📊 24h: <b>${change24Emoji(ch24)}${fmt(ch24)}%</b>   7d: <b>${change24Emoji(ch7d)}${fmt(ch7d)}%</b>`,
-    `📦 Market Cap: <b>${fmtBig(coin.market_cap)}</b>   Rank #${coin.market_cap_rank}`,
-    `💧 Volume 24h: <b>${fmtBig(coin.total_volume)}</b>`,
-    ``,
-    `Signal Strength: ${bar} <b>${signal_strength > 0 ? "+" : ""}${signal_strength}</b>`,
-    ``,
-    `<b>Reasons:</b>`,
-    ...signal_reasons.map((r) => `• ${r}`),
-  ];
-  return lines.join("\n");
 }
 
 function buildStrengthBar(strength: number): string {
@@ -97,6 +70,81 @@ function buildStrengthBar(strength: number): string {
   const empty = 10 - filled;
   return "█".repeat(filled) + "░".repeat(empty);
 }
+
+function rsiLabel(rsi: number): string {
+  if (rsi < 30) return "Oversold 🟢";
+  if (rsi > 70) return "Overbought 🔴";
+  return "Neutral ⚪";
+}
+
+function fundingLabel(rate: number): string {
+  const pct = (rate * 100).toFixed(4);
+  if (rate > 0.001) return `+${pct}% — longs paying (bearish) 🔴`;
+  if (rate > 0) return `+${pct}% — mild long bias`;
+  if (rate < -0.001) return `${pct}% — shorts paying (bullish) 🟢`;
+  if (rate < 0) return `${pct}% — mild short bias`;
+  return `${pct}% — neutral`;
+}
+
+// ─── Full coin message with TA ───────────────────────────────────────────────
+
+async function buildFullCoinMessage(coin: CoinGeckoMarket): Promise<string> {
+  const { signal, signal_strength, signal_reasons, ta, funding_rate } =
+    await computeSignalFull(coin);
+
+  const se = signalEmoji(signal);
+  const label =
+    signal === "buy_long" ? "BUY LONG" : signal === "sell_short" ? "SELL SHORT" : "NEUTRAL";
+  const ch24 = coin.price_change_percentage_24h;
+  const ch7d = coin.price_change_percentage_7d_in_currency;
+  const bar = buildStrengthBar(signal_strength);
+
+  const lines: string[] = [
+    `${se} <b>${coin.name} (${coin.symbol.toUpperCase()})</b> — <b>${label}</b>`,
+    ``,
+    `💰 Price:  <b>${fmtPrice(coin.current_price)}</b>`,
+    `📊 24h: <b>${changeEmoji(ch24)}${fmt(ch24)}%</b>   7d: <b>${changeEmoji(ch7d)}${fmt(ch7d)}%</b>`,
+    `📦 Mkt Cap: <b>${fmtBig(coin.market_cap)}</b>   Rank #${coin.market_cap_rank}`,
+    `💧 Volume:  <b>${fmtBig(coin.total_volume)}</b>`,
+    ``,
+  ];
+
+  // ── Technical Indicators ───────────────────────────────────────────────────
+  if (ta && (ta.rsi != null || ta.macd != null || ta.bb != null)) {
+    lines.push(`📉 <b>Technical Indicators</b>`);
+    if (ta.rsi != null) {
+      lines.push(`  RSI(14):  <b>${ta.rsi}</b> — ${rsiLabel(ta.rsi)}`);
+    }
+    if (ta.macd != null) {
+      const histDir = ta.macd.histogram >= 0 ? "▲ Bullish" : "▼ Bearish";
+      lines.push(`  MACD:     Histogram <b>${ta.macd.histogram > 0 ? "+" : ""}${ta.macd.histogram.toExponential(2)}</b> — ${histDir}`);
+    }
+    if (ta.bb != null) {
+      const pctB = (ta.bb.pctB * 100).toFixed(1);
+      const bbLabel =
+        ta.bb.pctB < 0.25 ? "Near lower band 🟢" : ta.bb.pctB > 0.75 ? "Near upper band 🔴" : "Mid-band ⚪";
+      lines.push(`  BB %B:    <b>${pctB}%</b> — ${bbLabel}`);
+    }
+    lines.push(``);
+  }
+
+  // ── Funding Rate (Binance Futures) ─────────────────────────────────────────
+  if (funding_rate != null) {
+    lines.push(`💸 <b>Funding Rate (Binance)</b>`);
+    lines.push(`  ${fundingLabel(funding_rate)}`);
+    lines.push(``);
+  }
+
+  // ── Signal ─────────────────────────────────────────────────────────────────
+  lines.push(`Signal Strength: ${bar} <b>${signal_strength > 0 ? "+" : ""}${signal_strength}</b>`);
+  lines.push(``);
+  lines.push(`<b>Signal Reasons:</b>`);
+  for (const r of signal_reasons) lines.push(`• ${r}`);
+
+  return lines.join("\n");
+}
+
+// ─── Market summary ──────────────────────────────────────────────────────────
 
 async function buildMarketSummaryMessage(): Promise<string> {
   const [global, markets] = await Promise.all([getGlobal(), getMarkets(100)]);
@@ -124,6 +172,8 @@ async function buildMarketSummaryMessage(): Promise<string> {
   ].join("\n");
 }
 
+// ─── Top signals ─────────────────────────────────────────────────────────────
+
 async function buildTopSignalsMessage(): Promise<string> {
   const markets = await getMarkets(100);
   const withSignals = markets.map((coin) => ({ coin, ...computeSignal(coin) }));
@@ -145,7 +195,7 @@ async function buildTopSignalsMessage(): Promise<string> {
     for (const x of buyTop) {
       const ch = x.coin.price_change_percentage_24h;
       lines.push(
-        `  ${x.coin.name} (${x.coin.symbol.toUpperCase()}) — ${fmtPrice(x.coin.current_price)} ${change24Emoji(ch)}${fmt(ch)}% | Strength: +${x.signal_strength}`
+        `  ${x.coin.name} (${x.coin.symbol.toUpperCase()}) — ${fmtPrice(x.coin.current_price)} ${changeEmoji(ch)}${fmt(ch)}% | Strength: +${x.signal_strength}`
       );
     }
     lines.push(``);
@@ -156,7 +206,7 @@ async function buildTopSignalsMessage(): Promise<string> {
     for (const x of sellTop) {
       const ch = x.coin.price_change_percentage_24h;
       lines.push(
-        `  ${x.coin.name} (${x.coin.symbol.toUpperCase()}) — ${fmtPrice(x.coin.current_price)} ${change24Emoji(ch)}${fmt(ch)}% | Strength: ${x.signal_strength}`
+        `  ${x.coin.name} (${x.coin.symbol.toUpperCase()}) — ${fmtPrice(x.coin.current_price)} ${changeEmoji(ch)}${fmt(ch)}% | Strength: ${x.signal_strength}`
       );
     }
   }
@@ -164,7 +214,7 @@ async function buildTopSignalsMessage(): Promise<string> {
   return lines.join("\n");
 }
 
-// ─── Command Handlers ───────────────────────────────────────────────────────
+// ─── Command handler ─────────────────────────────────────────────────────────
 
 async function handleCommand(chatId: number, text: string) {
   const [cmd, ...args] = text.trim().split(/\s+/);
@@ -175,15 +225,15 @@ async function handleCommand(chatId: number, text: string) {
       await sendMessage(
         chatId,
         [
-          `🤖 <b>CryptoDetect Bot</b>`,
+          `🤖 <b>CryptoDetect Bot</b> — Powered by Binance + CoinGecko`,
           ``,
           `Commands:`,
-          `/price &lt;coin&gt; — Price + signal for a coin`,
+          `/price &lt;coin&gt; — Full analysis: price, RSI, MACD, BB, funding rate`,
           `  e.g. <code>/price bitcoin</code>`,
           `/signals — Top Buy Long &amp; Sell Short coins`,
           `/market — Overall market summary`,
-          `/top — Top 10 coins by market cap with signals`,
-          `/alert on — Start auto alerts every 30 min`,
+          `/top — Top 10 coins by market cap`,
+          `/alert on — Auto alerts every 30 min`,
           `/alert off — Stop auto alerts`,
           `/help — Show this message`,
         ].join("\n")
@@ -191,11 +241,12 @@ async function handleCommand(chatId: number, text: string) {
     } else if (command === "/price") {
       const query = args.join(" ").toLowerCase().trim();
       if (!query) {
-        await sendMessage(chatId, "Usage: /price &lt;coin name or symbol&gt;\nExample: /price bitcoin");
+        await sendMessage(chatId, "Usage: /price &lt;coin&gt;\nExample: /price bitcoin");
         return;
       }
-      await sendMessage(chatId, `🔍 Looking up <b>${query}</b>...`);
-      const markets = await getMarkets(250);
+      await sendMessage(chatId, `🔍 Fetching full analysis for <b>${query}</b>...`);
+
+      const markets = await getMarketsWithSparkline();
       const coin =
         markets.find((c) => c.id === query) ||
         markets.find((c) => c.symbol.toLowerCase() === query) ||
@@ -203,9 +254,13 @@ async function handleCommand(chatId: number, text: string) {
         markets.find((c) => c.name.toLowerCase().includes(query) || c.id.includes(query));
 
       if (!coin) {
-        await sendMessage(chatId, `❌ Coin "<b>${query}</b>" not found in top 250. Try the full name (e.g. bitcoin, ethereum, solana).`);
+        await sendMessage(
+          chatId,
+          `❌ Coin "<b>${query}</b>" not found in top 250.\nTry: bitcoin, ethereum, solana, bnb, xrp`
+        );
       } else {
-        await sendMessage(chatId, buildCoinMessage(coin));
+        const msg = await buildFullCoinMessage(coin);
+        await sendMessage(chatId, msg);
       }
     } else if (command === "/signals") {
       await sendMessage(chatId, await buildTopSignalsMessage());
@@ -219,7 +274,7 @@ async function handleCommand(chatId: number, text: string) {
         const se = signalEmoji(signal);
         const ch = coin.price_change_percentage_24h;
         lines.push(
-          `${se} #${coin.market_cap_rank} <b>${coin.name}</b> (${coin.symbol.toUpperCase()}) — ${fmtPrice(coin.current_price)} ${change24Emoji(ch)}${fmt(ch)}% | Strength: ${signal_strength > 0 ? "+" : ""}${signal_strength}`
+          `${se} #${coin.market_cap_rank} <b>${coin.name}</b> (${coin.symbol.toUpperCase()}) — ${fmtPrice(coin.current_price)} ${changeEmoji(ch)}${fmt(ch)}% | Strength: ${signal_strength > 0 ? "+" : ""}${signal_strength}`
         );
       }
       await sendMessage(chatId, lines.join("\n"));
@@ -227,23 +282,23 @@ async function handleCommand(chatId: number, text: string) {
       const sub = args[0]?.toLowerCase();
       if (sub === "on") {
         startAlerts(String(chatId));
-        await sendMessage(chatId, "✅ Auto-alerts enabled. You'll get signal updates every 30 minutes.");
+        await sendMessage(chatId, "✅ Auto-alerts ON — signal updates every 30 minutes.");
       } else if (sub === "off") {
         stopAlerts();
-        await sendMessage(chatId, "🔕 Auto-alerts disabled.");
+        await sendMessage(chatId, "🔕 Auto-alerts OFF.");
       } else {
-        await sendMessage(chatId, "Usage: /alert on or /alert off");
+        await sendMessage(chatId, "Usage: /alert on  or  /alert off");
       }
     } else {
-      await sendMessage(chatId, `Unknown command. Send /help to see available commands.`);
+      await sendMessage(chatId, `Unknown command. Send /help to see all commands.`);
     }
   } catch (err) {
     logger.error({ err, command }, "Command handler error");
-    await sendMessage(chatId, "❌ Something went wrong. Please try again.");
+    await sendMessage(chatId, "❌ Something went wrong. Please try again in a moment.");
   }
 }
 
-// ─── Auto Alerts ────────────────────────────────────────────────────────────
+// ─── Auto alerts ─────────────────────────────────────────────────────────────
 
 function startAlerts(chatId: string) {
   if (alertInterval) clearInterval(alertInterval);
@@ -266,7 +321,7 @@ function stopAlerts() {
   }
 }
 
-// ─── Long Polling ────────────────────────────────────────────────────────────
+// ─── Long polling ─────────────────────────────────────────────────────────────
 
 async function poll() {
   try {
@@ -279,9 +334,11 @@ async function poll() {
       schedulePoll(5000);
       return;
     }
-    const data = await res.json() as { ok: boolean; result: TgUpdate[] };
-    if (!data.ok) { schedulePoll(5000); return; }
-
+    const data = (await res.json()) as { ok: boolean; result: TgUpdate[] };
+    if (!data.ok) {
+      schedulePoll(5000);
+      return;
+    }
     for (const update of data.result) {
       offset = update.update_id + 1;
       const msg = update.message;
@@ -305,13 +362,10 @@ function schedulePoll(ms: number) {
 
 interface TgUpdate {
   update_id: number;
-  message?: {
-    chat: { id: number };
-    text?: string;
-  };
+  message?: { chat: { id: number }; text?: string };
 }
 
-// ─── Startup ─────────────────────────────────────────────────────────────────
+// ─── Startup ──────────────────────────────────────────────────────────────────
 
 export function startTelegramBot() {
   if (!BOT_TOKEN) {
@@ -319,17 +373,23 @@ export function startTelegramBot() {
     return;
   }
 
-  logger.info("Starting Telegram bot (long polling)");
+  logger.info("Starting Telegram bot (long polling) — powered by Binance + CoinGecko");
   schedulePoll(500);
 
-  // Send startup alert to default chat if configured
   if (DEFAULT_CHAT_ID) {
     sendMessage(
       DEFAULT_CHAT_ID,
-      `🚀 <b>CryptoDetect Bot is online!</b>\n\nSend /help to see all commands.\n\nUse /alert on to get automatic signal alerts every 30 minutes.`
+      [
+        `🚀 <b>CryptoDetect Bot is online!</b>`,
+        ``,
+        `Powered by <b>Binance Futures</b> funding rates + <b>CoinGecko</b> price data`,
+        ``,
+        `/help — see all commands`,
+        `/price bitcoin — full RSI, MACD, BB + funding rate analysis`,
+        `/alert on — auto alerts every 30 min`,
+      ].join("\n")
     ).catch(() => {});
 
-    // Auto-start alerts for the default chat
     startAlerts(DEFAULT_CHAT_ID);
   }
 }
