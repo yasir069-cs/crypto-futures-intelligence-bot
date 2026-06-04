@@ -303,5 +303,21 @@ class Database:
             raise
         finally:
             conn.close()
+        def get_portfolio(self, user_id: str):
+        """Get user portfolio"""
+
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT *
+            FROM portfolio
+            WHERE user_id = ?
+        """, (user_id,))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [dict(row) for row in rows]
 
 
