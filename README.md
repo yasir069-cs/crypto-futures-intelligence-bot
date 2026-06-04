@@ -4,13 +4,13 @@ A production-grade Telegram bot for crypto market analysis and trading signals.
 
 ## Features
 
-- ✅ Telegram command-based interface
-- ✅ Market signal management
-- ✅ Daily statistics tracking
-- ✅ Signal history database (SQLite)
-- ✅ Easy deployment to cloud servers
-- ✅ Lightweight and low resource usage
-- ✅ **Works in India** - No blocked exchange APIs
+- âœ… Telegram command-based interface
+- âœ… Market signal management
+- âœ… Daily statistics tracking
+- âœ… Signal history database (SQLite)
+- âœ… Easy deployment to cloud servers
+- âœ… Lightweight and low resource usage
+- âœ… **Works in India** - No blocked exchange APIs
 
 ## Tech Stack
 
@@ -76,9 +76,11 @@ The bot will:
 |---------|-------------|
 | `/start` | Start the bot |
 | `/help` | Show help message |
-| `/top` | Show top 10 signals |
-| `/buy` | Show BUY LONG signals |
-| `/sell` | Show SELL SHORT signals |
+| `/top` | Show top BUY and SELL opportunities |
+| `/buy <coin>` | Show BUY LONG analysis for a coin |
+| `/sell <coin>` | Show SELL SHORT analysis for a coin |
+| `/analysis <coin>` | Show detailed technical analysis for a coin |
+| `/alerts` | Show automatic alert scanner status |
 | `/summary` | Daily market summary |
 | `/status` | Bot status and uptime |
 
@@ -86,22 +88,22 @@ The bot will:
 
 ```
 crypto-futures-intelligence-bot/
-├── main.py                 # Entry point
-├── requirements.txt        # Dependencies
-├── .env                    # Configuration (create this)
-├── .env.example            # Configuration template
-├── config.py              # Configuration management
-├── database.py            # SQLite operations
-├── telegram/
-│   ├── __init__.py
-│   ├── bot.py            # Telegram bot handler
-│   └── formatter.py      # Message formatting
-├── utils/
-│   ├── __init__.py
-│   ├── logger.py         # Logging setup
-│   └── helpers.py        # Utility functions
-└── tests/
-    └── test_telegram_bot.py
+â”œâ”€â”€ main.py                 # Entry point
+â”œâ”€â”€ requirements.txt        # Dependencies
+â”œâ”€â”€ .env                    # Configuration (create this)
+â”œâ”€â”€ .env.example            # Configuration template
+â”œâ”€â”€ config.py              # Configuration management
+â”œâ”€â”€ database.py            # SQLite operations
+â”œâ”€â”€ bot_telegram/
+â”‚   â”œâ”€â”€ __init__.py
+â”‚   â”œâ”€â”€ bot.py            # Telegram bot handler
+â”‚   â””â”€â”€ handlers.py       # Command handlers
+â”œâ”€â”€ utils/
+â”‚   â”œâ”€â”€ __init__.py
+â”‚   â”œâ”€â”€ logger.py         # Logging setup
+â”‚   â””â”€â”€ helpers.py        # Utility functions
+â””â”€â”€ tests/
+    â””â”€â”€ test_telegram_bot.py
 ```
 
 ## Deployment
